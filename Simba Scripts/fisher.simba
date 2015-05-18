@@ -1,0 +1,133 @@
+program PowerFisherEduard;
+{$DEFINE SMART8}
+{$I SRL-OSR/SRL.Simba}
+{$I SRL-OSR\SRL\misc\SmartGraphics.simba}
+
+var
+  x, y: Integer;
+  PBox: TBox;
+
+procedure DeclarePlayers;
+begin
+  HowManyPlayers := 1;
+  NumberOfPlayers(HowManyPlayers);
+  CurrentPlayer := 0;
+  Players[0].Name := '';
+  Players[0].Pass := '';
+  Players[0].Pin := '';
+  Players[0].Member := True;
+  Players[0].WorldInfo := [];
+  Players[0].Active := True;
+  Players[0].Nick := '';
+  Players[0].LampSkill := SKILL_Thieving;
+end;
+
+procedure PixelFishingTrue;
+begin
+  SMART_DRAWTEXT(207, 120, 'UpChars', inttostr(AveragePixelShift(pBox, 250, 350)), 255);
+end;
+
+procedure DrawStatus(Text: string);
+begin
+  SMART_ClearMS;
+  PixelFishingTrue;
+  SMART_DRAWTEXT(244, 120, 'UpChars', (Text), 16777215);
+end;
+
+procedure CustomLogin;
+begin
+  if not LoggedIn then
+  begin
+    DrawStatus('LOGGING IN');
+    LogInPlayer;
+    MakeCompass('N');
+    SetAngle(0);
+    Wait(RandomRange(2000, 3500));
+  end;
+end;
+
+procedure FindFishingPool;
+begin
+  DrawStatus('FIND FISHING POOL');
+  if (FindObjCustom(x, y, ['ure', 'ishin', 'ot'], [14597535, 15123609, 14794914, 14858129, 13216647, 14597268, 15123625, 14398100, 14729121], 3)) then
+  begin
+    DrawStatus('FOUND FISH SPOT');
+    MMouse(x, y, 2, 2);
+    Mouse(x, y, 2, 2, 1);
+    wait(1000 + random(50));
+  end
+  else
+  begin
+    DrawStatus('NO FISH SPOT FOUND');
+  end;
+end;
+
+function IsFishing: boolean;
+begin
+  if (InvCount = 28) then
+  begin
+    DrawStatus('INV FULL');
+    Exit;
+  end;
+  begin
+    if (AveragePixelShift(pBox, 250, 350) > 60) then
+    begin
+      result := true;
+      FTWait(100 + random(10));
+    end
+    else
+    begin
+      DrawStatus('NOT FISHING');
+      result := false;
+      FTWait(100 + random(10));
+    end;
+  end;
+end;
+
+procedure mainloop;
+begin
+  DrawStatus('MAIN LOOP');
+  repeat
+    DrawStatus('CHECKING RANDOMS');
+    FindNormalRandoms;
+    if (InvCount = 28) then
+    begin
+      DrawStatus('INV FULL');
+      break;
+    end;
+    if (InvCount < 2) then
+    begin
+      DrawStatus('NO RODS AVAILABLE');
+      LogOut;
+    end;
+    if not (isFishing) then
+    begin
+      DrawStatus('NOT FISHING');
+      FindFishingPool;
+    end;
+    while (isFishing = true) do
+    begin
+      FTWait(randomrange(2000, 3000));
+    end;
+  until (InvCount = 28) DrawStatus('INV FULL');
+  DropAllExcept([1, 2, 3, 4, 5, 6]);
+  DrawStatus('INV EMPTY');
+  MakeCompass('N');
+  FindFishingPool;
+end;
+
+begin
+  DeclarePlayers;
+  SetupSRL;
+  CustomLogin;
+  ClearDebug;
+  PBox := IntToBox(233, 149, 292, 193);
+  FindFishingPool;
+  repeat
+    if not (LoggedIn) then
+    begin
+      CustomLogin;
+    end;
+    mainloop;
+  until (not LoggedIn)
+end.

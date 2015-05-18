@@ -1,0 +1,417 @@
+program DaviAutoTele;
+{$DEFINE SMART}
+{$I SRL-OSR/SRL.simba}
+{$I SRL-OSR/SRL/misc/smartgraphics.simba}
+
+const
+   default = 'Verdana';
+  VarrockXP = 35;
+  LumbridgeXP = 41;
+  FaladorXP = 48;
+  HouseXP = 30;
+  CamelotXP = 55;
+  ArdougneXP = 61;
+  WatchtowerXP = 68;
+  TrollheimXP = 68;
+  ApeTollXP = 74;
+
+var
+  teleportX : Integer;
+  teleportY : Integer;
+  teleports : Integer;
+  mouseX : Integer;
+  mouseY : Integer;
+  totalXP : Integer;
+  XP : Integer;
+  Location : String;
+  x : Integer;
+  y : Integer;
+  Limit : Integer;
+  Form1: TForm;
+  Label1: TLabel;
+  Label2: TLabel;
+  Label4: TLabel;
+  Label5: TLabel;
+  Edit1: TEdit;
+  Edit2: TEdit;
+  Edit4: TEdit;
+  CheckBox1: TCheckBox;
+  ComboBox1: TComboBox;
+  Button1: TButton;
+  Started: Boolean;
+
+procedure Draw(text: string);
+begin
+  SMART_ClearCanvas;
+  SMART_DrawText(12, 345, 'SmallChars', 'Made by: Davi', clWhite);   // Took this GUI from xxpoopyxx and changed it for my needs as well as colourscheme
+  SMART_DrawText(12, 351, 'SmallChars', '_____________', clWhite);
+  SMART_DrawText(12, 370, 'SmallChars', 'Status : ' + text, clRed);
+  SMART_DrawText(250, 356, 'SmallChars', 'Time Running : ' + TimeRunning, clYellow);
+  SMART_DrawText(250, 370, 'SmallChars', 'Number of times teleported : ' + inttostr(teleports), clYellow);
+  SMART_DrawText(250, 384, 'SmallChars', 'XP Gained : '+ inttostr(totalXP), clYellow);
+  SMART_DrawText(250, 398, 'SmallChars', 'XP per hour : '+ inttostr(totalXP * 3600 / (GetTimeRunning / 1000)), clYellow); // added this
+end;
+
+
+procedure DeclareSettings;             // All of this is a copy-paste from xxpoopyxx's autotele I just fixed typo's removed some redundancy and changed it to work with my method.
+begin
+
+  NumberOfPlayers(1);
+  CurrentPlayer := 0;
+  Players[0].Name := Edit1.TEXT;
+  Players[0].Pass := Edit2.TEXT;
+  Players[0].Active := True;
+  Limit := StrToInt(Edit4.TEXT);
+
+  case ComboBox1.ITEMINDEX of
+    0: Location := 'Varrock';
+    1: Location := 'Lumbridge';
+    2: Location := 'Falador';
+    3: Location := 'House';
+    4: Location := 'Camelot';
+    5: Location := 'Ardougne';
+    6: Location := 'Watchtower';
+    7: Location := 'Trollheim';
+    8: Location := 'Ape Toll';
+  end;
+  if (Location = 'Varrock') then
+  begin
+    writeln(Location);
+    teleportX := 595;
+    teleportY := 275;
+    XP := VarrockXP;
+  end;
+  if (Location = 'Lumbridge') then
+  begin
+    writeln(Location);
+    teleportX := 665;
+    teleportY := 275;
+    XP := LumbridgeXP;
+  end;
+  if (Location = 'Falador') then
+  begin
+    writeln(Location);
+    teleportX := 570;
+    teleportY := 305;
+    XP := FaladorXP;
+  end;
+  if (Location = 'House') then
+  begin
+    writeln(Location);
+    teleportX := 620;
+    teleportY := 305;
+    XP := HouseXP;
+  end;
+  if (Location = 'Camelot') then
+  begin
+    writeln(Location);
+    teleportX := 690;
+    teleportY := 305;
+    XP := CamelotXP;
+  end;
+  if (Location = 'Ardougne') then
+  begin
+    writeln(Location);
+    teleportX := 665;
+    teleportY := 325;
+    XP := ArdougneXP;
+  end;
+  if (Location = 'Watchtower') then
+  begin
+    writeln(Location);
+    teleportX := 620;
+    teleportY := 350;
+    XP := WatchtowerXP;
+  end;
+  if (Location = 'Trollheim') then
+  begin
+    writeln(Location);
+    teleportX := 620;
+    teleportY := 375;
+    XP := TrollheimXP;
+  end;
+  if (Location = 'Ape Toll') then
+  begin
+    writeln(Location);
+    teleportX := 690;
+    teleportY := 375;
+    XP := ApeTollXP;
+  end;
+end;
+
+procedure Start(Sender: TObject);
+begin
+  if (Sender = Button1) then
+  begin
+    Form1.CLOSE;
+    Started := True;
+  end;
+end;
+
+procedure Form1_Init;   // Most of this is kept the same I just removed some redundancies
+begin
+  Form1 := CreateForm;
+  Label1 := TLabel.Create(Form1);
+  Label2 := TLabel.Create(Form1);
+  Label4 := TLabel.Create(Form1);
+  Label5 := TLabel.Create(Form1);
+  Edit1 := TEdit.Create(Form1);
+  Edit2 := TEdit.Create(Form1);
+  Edit4 := TEdit.Create(Form1);
+  ComboBox1 := TComboBox.Create(Form1);
+  CheckBox1 := TCheckBox.Create(Form1);
+  Button1 := TButton.Create(Form1);
+  with Form1 do
+  begin
+    Left := 690;
+    Top := 241;
+    Caption := 'Auto Tele';
+    ClientHeight := 230;
+    ClientWidth := 220;
+    Color := clWindow;
+    Font.Color := clWindowText;
+    Font.Height := - 11;
+    Font.Name := 'Tahoma';
+    Font.Style := [];
+    PixelsPerInch := 96;
+  end;
+  with Label1 do
+  begin
+    Parent := Form1;
+    Left := 10;
+    Top := 10;
+    Width := 52;
+    Height := 13;
+    Caption := 'Username:';
+  end;
+  with Label2 do
+  begin
+    Parent := Form1;
+    Left := 10;
+    Top := 40;
+    Width := 50;
+    Height := 13;
+    Caption := 'Password:';
+  end;
+  with Label4 do
+  begin
+    Parent := Form1;
+    Left := 10;
+    Top := 70;
+    Width := 40;
+    Height := 13;
+    Caption := 'Teleport:';
+  end;
+  with Label5 do
+  begin
+    Parent := Form1;
+    Left := 10;
+    Top := 150;
+    Width := 40;
+    Height := 13;
+    Caption := 'Limit:';
+  end;
+  with Edit1 do
+  begin
+    Parent := Form1;
+    Left := 65;
+    Top := 8;
+    Width := 135;
+    Height := 21;
+    TabOrder := 0;
+  end;
+  with Edit2 do
+  begin
+    Parent := Form1;
+    Left := 65;
+    Top := 38;
+    Width := 135;
+    Height := 21;
+    TabOrder := 1;
+    PasswordChar := '*';
+  end;
+  with Edit4 do
+  begin
+    Parent := Form1;
+    Left := 65;
+    Top := 148;
+    Width := 40;
+    Height := 21;
+    TabOrder := 2;
+    Caption := '50';
+  end;
+  with CheckBox1 do
+  begin
+    Parent := Form1;
+    Left := 115;
+    Top := 148;
+    Width := 133;
+    Height := 17;
+    Caption := 'Logout at limit';
+    TabOrder := 1;
+  end;
+  with ComboBox1 do
+  begin
+    Parent := Form1;
+    Left := 65;
+    Top := 68;
+    Width := 135;
+    Height := 21;
+    TabOrder := 3;
+    Caption := 'Varrock';
+    Items.Add('Varrock');
+    Items.Add('Lumbridge');
+    Items.Add('Falador');
+    Items.Add('House');
+    Items.Add('Camelot');
+    Items.Add('Ardongue');
+    Items.Add('Watchtower');
+    Items.Add('Trollheim');
+    Items.Add('Ape Toll');
+  end;
+  with Button1 do
+  begin
+    Parent := Form1;
+    Left := 70;
+    Top := 190;
+    Width := 75;
+    Height := 25;
+    Caption := 'Start';
+    TabOrder := 4;
+    OnClick := @ Start;
+  end;
+end;
+
+procedure Form1_SafeInit;
+var
+  v: TVariantArray;
+begin
+  SetLength(v, 0);
+  ThreadSafeCall('Form1_Init', v);
+end;
+
+function Form1_ShowModal: Boolean;
+begin
+  Result := Form1.ShowModal = mrOk;
+end;
+
+function Form1_SafeShowModal: Boolean;
+var
+  v: TVariantArray;
+begin
+  SetLength(v, 0);
+  Result := ThreadSafeCall('Form1_ShowModal', v);
+end;
+
+Procedure RandomMouse;
+Begin
+  case random(200) of  // Move the mouse to the teleport location
+    0..160: MMouse(RandomRange(teleportX - 5, teleportX + 5), RandomRange(teleportY - 5, teleportY + 5), 0, 0);
+    161..190: MMouse(RandomRange(teleportX - 7, teleportX + 7), RandomRange(teleportY - 7, teleportY +7), 0, 0);       // This methodology was inspired by rj's antiban guide
+    191..200: MMouse(RandomRange(teleportX - 10, teleportX + 10), RandomRange(teleportY - 10, teleportY + 10), 0, 0);
+  end;
+end;
+
+Procedure RandomWait;
+Begin
+Draw('Waiting');
+  case random(1000) of
+    0..700:    Wait(RandomRange(600, 1200));
+    701..900:  Wait(RandomRange(800, 1800));   // From rj's antiban guide with the numbers tweaked for teleporting
+    901..1000: Wait(RandomRange(1000, 4000));
+  End;
+End;
+
+procedure checkTele;
+var
+timeTaken : Integer;
+loading : String;
+retry, ab : Boolean;
+begin
+  loading := 'Confirming Teleport';
+  timeTaken := 0;
+  retry := false;
+  ab := false;
+  repeat
+  Draw(loading);
+  loading := loading + '.';
+  Wait(RandomRange(100, 200));
+  timeTaken := timeTaken + 1;
+  if (timeTaken > 30) then
+  begin
+    Draw('Adjusting camera and retrying');
+    RandomAngle(2);
+    Wait(RandomRange(200, 800));
+    RandomMouse;
+    retry := true;
+    break;
+  End;
+  until (FindColorSpiralTolerance(x, y, 9856660, 220, 100, 300, 215, 28)); // Looking for the teleport color in a box around the user - From Tickyy's all about colors guide
+  if (not retry) then
+    begin
+      teleports := teleports + 1;
+      totalXP := totalXP + XP;
+      Draw('Teleported');
+      case random(100) of
+        0..5: ab := true;
+      End;
+      if (ab = true) then
+        begin
+          SetScreenMouse('rand', 1)
+          Wait(RandomRange(200, 800));
+          RandomMouse;
+        end;
+    end;
+end;
+
+procedure Teleport;
+begin
+Draw('Checking Tab');
+if not GameTab(tab_magic) then
+  begin
+    Draw('Moving tab');
+    GameTab(tab_magic);
+    RandomWait;
+    RandomMouse;
+  end;
+if  GameTab(tab_magic) then
+ begin
+  Draw('Clicking ' + Location + ' teleport');
+  case random(100) of  // 20% chance of moving the mouse while teleporting, with human-like variance on the movement range
+    0..20: RandomMouse; // Not the ideal method - the idea is not moving the mouse too often, however problems arise
+  end;                  // when the mouse isn't already on the teleport location - Ideally a comparison between mouse's current
+  Wait(RandomRange(100, 400)); // Coords and the teleport area is the solution, but there is nothing about that in the documentation.
+  clickMouse2(MOUSE_LEFT);
+  Draw('Finished clicking ' + Location + ' teleport');
+  checkTele;
+  end;
+end;
+
+begin
+Form1_SafeInit;
+Form1_SafeShowModal;
+setupSRL;
+totalXP := 0;
+teleports := 0;
+x := 0;
+y := 0;
+if (Started) then          // Login method taken from AutoTele
+  begin
+    DeclareSettings;
+    if not (LoggedIn) then
+    begin
+      LogInPlayer;
+    end;
+    SMART_ClearCanvas;
+    RandomMouse;
+  repeat
+    Teleport;
+    RandomWait;
+  until (teleports = Limit);
+    if CheckBox1.CHECKED then
+    begin
+      Draw('Logging out');
+      Logout;
+    end;
+  end;
+end.

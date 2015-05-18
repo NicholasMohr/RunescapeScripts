@@ -1,0 +1,750 @@
+program AeroMagicPro;
+{$DEFINE SMART}
+{$i AeroLib/AeroLib.Simba}
+
+Const
+//----------------------Being user setup----------------------//
+  TASK           = 'Alch';         // Superheat / Alch
+  TYPINGPAUSE    = True;           // Pause the script while you're typing?
+
+// Superheating settings
+  SHLOCATION     = 'Edgeville';    // Falador west, Falador east, Al-kharid, Edgeville
+  BARTYPE        = 'Steel';        // Type of bar to superheat
+  STOPAT         = 100;            // Stop when this many ores is remaining (primary OR secondary)
+  HEATSTYLE      = 'Standard';     // Style of casting, used for super-heating ONLY!
+                                   // 'Standard'   = Repeat cast on the last primary ore in the inventory
+                                   // 'Increasing' = Cast spell on each primary ore in order starting from slot #2
+
+// Player info
+  P_USERNAME     = '';
+  P_PASSWORD     = '';
+  P_NICKNAME     = '';
+  P_PIN          = '';
+  P_MEMBER       = True;
+
+// Break settings
+  cBREAK_IN      = 80;          // How long before we take a break? (minutes)
+  cBREAK_FOR     = 10;          // How long will we break for? (minutes)
+  cR_BREAK_IN    = 25;          // Random minutes to add/subtract from how long until we break
+  cR_BREAK_FOR   = 7;           // Random minutes to add/subjtract from break duraction
+//----------------------End user setup----------------------//
+
+// Core constants
+  VERSION_MAIN = 1.1;
+  VERSION_SUB  = 0;
+
+Var
+  timer_Report         : Timer;
+  item_OreA,item_OreB,
+  item_Bar,
+  item_NatRune         : TItem;
+  SH_Camera,hStyle     : String;
+  DTM_Spell,DTM_Bank,
+  count_Product,
+  slot_Alch            : Integer;
+  useDTM               : Boolean = False;
+  sXPMod,mXPMod        : Extended;
+  obj_Bank             : TMSObject;
+
+  PrimaryAmount        : Integer = -1;
+  Shutdown             : Boolean = False;
+  SDReason             : String  = 'Player inactive';
+
+procedure declarePlayer();
+begin
+  Me.Name      := P_USERNAME;
+  Me.Pass      := P_PASSWORD;
+  Me.Pin       := P_PIN;
+  Me.Nick      := P_NICKNAME;
+  Me.Member    := P_MEMBER;
+  Me.Active    := True;
+end;
+
+procedure loadVars();
+var
+  A,B,C : Integer;
+begin
+  case lowercase(BARTYPE) of
+    'bronze':
+    begin
+      A := DTMFromString('mggAAAHicY2NgYDjExMCwCYh3AfFBID4NxCeAeCYjA8N0IJ4HxEsYIfxJQHyv3hKoixEDy2EVxY0hAADlhAn8');
+      B := DTMFromString('mggAAAHicY2NgYMhjYmCIA+IkIM4B4hIgLgLiPYwMDLuA+AgQnwLi3UC8HYi7mxqBuhgxMBdWUdwYAgBDbwi3');
+      C := DTMFromString('mbQAAAHicY2VgYDjAxMCwmQlCn4Li6YwMDHOAeAmUngTEPlZKQNWMKJgLQwQ7BgMAi+0HoA==');
+      PrimaryAmount := 13;
+      sXPMod        := 6;
+    end;
+    'iron':
+    begin
+      A := DTMFromString('mggAAAHicY2NgYDjExMCwCYh3APFBID4CxOeAuIyRgaEIiKuBuAGIC6B8Hz0loC5GDMyFVRQ3hgAARokIEw==');
+      C := DTMFromString('mrAAAAHic42BgYJjGxMAwCYgnAHEnlD0DiBcA8RIg9mdkYAgCYh8gDgPiKCCOAeIQqFiglxeDqYEB0CRGrJgLSHLhlCWMYQAAvz4JCw==');
+      sXPMod        := 12.5;
+    end;
+    'silver':
+    begin
+      A := DTMFromString('mggAAAHicY2NgYMhjYmCIA+IkIM4B4kogLgLip0C5x0D8Bog/AfETIL4PxKtWbQWSjBiYC6sobgwBAL+7CiQ=');
+      C := DTMFromString('mlwAAAHicY2dgYHBhYmCwAWJTKA3i+wBxABAXMzIwFABxORDXAXEDEFdAxZYv3wzUzYgVc+GUwY+hAAAY1wdM');
+      sXPMod        := 13.75;
+    end;
+    'steel':
+    begin
+      A := DTMFromString('mggAAAHicY2NgYDjExMCwCYh3APFBID4CxOeAuIyRgaEIiKuBuAGIC6B8Hz0loC5GDMyFVRQ3hgAARokIEw==');
+      B := DTMFromString('mggAAAHicY2NgYJjGxMDQAcR9TBD2QiCeBcQcjAwMbEDMD8RiQMwDxCxArKcnD9TFiIG5sIrixhAAAOC3BG4=');
+      C := DTMFromString('mrAAAAHic42BgYDjAxMBwBIh3AfFmIN4JxIeA+BQQnwNif0YI9gHiECCOBOIYKNsXiEtzcxj6WluBJjFixVxAkgunLGEMAwAYsgvH');
+      PrimaryAmount := 9;
+      sXPMod        := 17.5;
+    end;
+    'gold':
+    begin
+      A := DTMFromString('mrAAAAHic42BgYIgC4jAgDgRiTyAOAuJ4IE4A4nQg/oKGGRgZGP4AqQ9QfHuzNFiwOcsLIomGubCKEo9hAAAEpgx3');
+      C := DTMFromString('mlwAAAHicY2dgYDjAxMCwB4i3APEuID4CxOeA+BQQ+zMyMARBcRQU+wFxCBBvnCDKUBLHCzSBEQNzAUkQxgYwVSMwFAAAlRIKAQ==');
+      sXPMod        := 22.5;
+    end;
+    'mith','mithril':
+    begin
+      A := DTMFromString('mggAAAHicY2NgYMhjYmCIA+IkIM4B4nIgLgTiAEYGBn8gjgDiOCAOBWJvIPbyygPqYsTAXFhFcWMIAAAzfAWs');
+      B := DTMFromString('mggAAAHicY2NgYJjGxMDQAcR9TBD2QiCeBcQcjAwMbEDMD8RiQMwDxCxArKcnD9TFiIG5sIrixhAAAOC3BG4=');
+      C := DTMFromString('mlwAAAHicY2dgYHBiYmCwAWJTILZmgvB9gDgAiB8D5R8A8XMgfgvEH4D4BVTM2jYKSDJixVw4ZfBjKAAA7+oJIA==');
+      PrimaryAmount := 5;
+      sXPMod        := 30;
+    end;
+    'addy','adamant','adamantite':
+    begin
+      A := DTMFromString('mggAAAHicY2NgYDjIxMCwBYg3AvEeID4NxMeAWIeRgUEdiA2A2ApKg/guEW5AXYwYmAurKG4MAQC6Mgac');
+      B := DTMFromString('mggAAAHicY2NgYJjGxMDQAcR9TBD2QiCeBcQcjAwMbEDMD8RiQMwDxCxArKcnD9TFiIG5sIrixhAAAOC3BG4=');
+      C := DTMFromString('mlwAAAHicY2dgYMhhYmBIA+J4IE4H4jwgLgPiKiB+DJR/AMQvgPgdEH+AskFidv52QJIRK+bCKYMfQwEAi5oKRQ==');
+      PrimaryAmount := 3;
+      sXPMod        := 37.5;
+    end;
+    'rune','runite':
+    begin
+      A := DTMFromString('mrAAAAHic42BgYJBkZGCQAWIxIOYCYgEglgBieSBWB+IvQDVvgPgTFP8CYkag+GeouHdKPhgDRbFiESAJwqw4MHZdCAwDAKJTCgM=');
+      B := DTMFromString('mggAAAHicY2NgYJjGxMDQAcR9TBD2QiCeBcQcjAwMbEDMD8RiQMwDxCxArKcnD9TFiIG5sIrixhAAAOC3BG4=');
+      C := DTMFromString('mlwAAAHicY2dgYOAFYmkg5gdidgYI4ABiYSBmAWImIBaEynNA5UHiWnbuQJIRA5sHxTJwYZVhwCkOw1AAAMj5Ak0=');
+      PrimaryAmount := 3;
+      sXPMod        := 50;
+    end;
+  end;
+
+  with item_OreA do
+    DTM := A;
+  if PrimaryAmount > 0 then
+    with item_OreB do
+      DTM := B;
+  with item_Bar do
+    DTM := C;
+
+  with item_NatRune do
+    DTM := DTMFromString('mrAAAAHic42BgYJjOBMF9QDwPiDuAuBuI5wPxIiB+ClTzCIhfAPFzKPsdEL8H4ntALNApwjC5o52hNDcHTDMwMKJgOSCJjBlJxDAAAGfWEcE=');
+
+  case lowercase(TASK) of
+    'superheat':
+    begin
+      mXPMod    := 53;
+      DTM_Spell := DTMFromString('mbQAAAHicY2VgYJjNxMAwhQlCLwDiWUBswcjAYALERlDaBojfFjIz/PmVxPDvrx7Dr288DBsEmBj4gfrRMSMWDAYAde0NFw==');
+    end;
+    'alch':
+    begin
+      mXPMod    := 65;
+      DTM_Spell := DTMFromString('mrAAAAHic42BgYDjHxMBwBoiPAfFBIL4AxEeA+DyU7cfIwOCDhAOg2B6IPYD41zceoCmMWLHBQQMGfpyyDHjlYBgGAC4fDB0=');
+    end;
+  end;
+
+  case lowercase(SHLOCATION) of
+    'falador west':
+    begin
+      obj_Bank.create('BankBooth', ['ank B','nk bo','booth'], [createCol(7043977, 8, 0.10, 0.71)], [createCol(4022392, 5, 0.23, 1.00)]);
+      SH_Camera := 'N';
+    end;
+    'falador east':
+    begin
+      obj_Bank.create('Bank booth', ['ank B','nk bo','booth'], [createCol(7373972, 5, 0.10, 0.96)], [createCol(3956855, 5, 0.19, 1.07)]);
+      SH_Camera := 'N';
+    end;
+    'al-kharid':
+    begin
+      obj_Bank.create('AlKharidBooth', ['ank B','nk bo','booth'], [createCol(5462624, 5, 0.75, 0.90)], [createCol(276299, 3, 0.11, 3.38)]);
+      SH_Camera := 'W';
+    end;
+    'edgeville':
+    begin
+      obj_Bank.create('Bank booth', ['ank B','nk bo','booth'], [createCol(606551, 3, 0.09, 1.07)]);
+      SH_Camera := 'N';
+    end;
+  end;
+
+  hStyle := HEATSTYLE;
+  if HEATSTYLE = 'Standard' then
+    if (PrimaryAmount < 0) then
+      hStyle := 'Increasing';
+
+  {$IFDEF SMART}
+    SmartSetDebug(OS_SMART.__Target, True);
+  {$ENDIF}
+  stats_Setup('27');
+  timer_Report.start();
+  setupBreak(cBREAK_IN, cBREAK_FOR, cR_BREAK_IN, cR_BREAK_FOR);
+end;
+
+procedure freeGlobals();
+begin
+  freeDTM(item_OreA.DTM);
+  if (PrimaryAmount < 0) then
+    freeDTM(item_OreB.DTM);
+  freeDTM(item_Bar.DTM);
+  freeDTM(item_NatRune.DTM);
+  freeDTM(DTM_Spell);
+  if useDTM then
+    freeDTM(DTM_Bank);
+  {$IFDEF SMART}
+    OS_Smart.Graphics.Clear;
+  {$ENDIF}
+end;
+
+Procedure report();
+var
+  sXP,mXP : Integer;
+begin
+  sXP  := max(round(count_Product*sXPMod),1);
+  mXP  := max(round(count_Product*mXPMod),1);
+
+  if lowercase(TASK) = 'superheat'then
+  begin
+    progressReport(RESULT_DEBUGBOX, 'AeroMagicPro', 'Flight', 'V '+toStr(VERSION_MAIN)+' Rev '+toStr(VERSION_SUB),
+      ['Total run time','Bars smelted','Smithing XP','Magic XP','Breaks','Logged in'],
+      [MsToTime(getTimeRunning(),Time_Abbrev),intToStrEx(count_Product)+' ('+intToStrEx(getPerHour(count_Product))+'/Hr)',
+       intToStrEx(sXP)+' ('+intToStrEx(getPerHour(sXP))+'/Hr)',
+       intToStrEx(mXP)+' ('+intToStrEx(getPerHour(mXP))+'/Hr)',break_Count,count_Login]);
+  end else if lowercase(TASK) = 'alch'then
+  begin
+    progressReport(RESULT_DEBUGBOX, 'AeroMagicPro', 'Flight', 'V '+toStr(VERSION_MAIN)+' Rev '+toStr(VERSION_SUB),
+      ['Total run time','Items alched','Magic XP','Breaks','Logged in'],
+      [MsToTime(getTimeRunning(),Time_Abbrev),intToStrEx(count_Product)+' ('+intToStrEx(getPerHour(count_Product))+'/Hr)',
+       intToStrEx(mXP)+' ('+intToStrEx(getPerHour(mXP))+'/Hr)',break_Count,count_Login]);
+  end;
+
+  writeln('Time until break: '+msToTime(getTimeUntilBreak(), Time_Bare));
+  timer_Report.start();
+  stats_Commit();
+end;
+
+procedure highlightItemInSlot(var slot: integer);
+var
+  b   : TBox;
+  T   : Timer;
+  i,h : Integer;
+  tpa : TPointArray;
+begin
+  {$IFDEF SMART}
+    OS_Smart.Graphics.Clear;
+  {$ENDIF}
+  FTab(TAB_INV);
+  showMessage('Hover the mouse over the item you wish to alch for 1 second');
+  wait(500);
+  T.start();
+  repeat
+    if pointInBox(getRealMousePnt(), AREA_INV) then
+      for i:=1 to 28 do
+        if pointInBox(getRealMousePnt(), invBox(i)) then
+        begin
+          if not (h = i) then
+          begin
+            h   := i;
+            {$IFDEF SMART}
+              tpa := TPAFromBox(invBox(h));
+              OS_Smart.Graphics.Clear;
+              OS_Smart.__Graphics.DrawBox(getTPABounds(tpa), False, clWhite);
+            {$ENDIF}
+            T.start();
+          end;
+        end;
+  until((T.timeElapsed > 1000) and inRange(h,1,28));
+  slot := h;
+  {$IFDEF SMART}
+    OS_Smart.Graphics.Clear;
+  {$ENDIF}
+end;
+
+procedure doAntiBan();
+begin
+  if not isLoggedIn() then Exit;
+
+  case random(50) of
+    0..8  : checkMovingObjs(false);
+    9..11 : checkMovingObjs(true);
+    12..19: wait(randomRange(4000,21000));
+    20    : hoverSkill(SKILL_MAGIC, false);
+    21    :
+    begin
+      if lowercase(TASK) = 'superheat' then
+        hoverSkill(SKILL_SMITHING, false);
+    end;
+    22..50: humanRandomMouse();
+  end;
+end;
+
+function mageTab(): Boolean;
+begin
+  result := (GetCurrentTab = tab_Magic);
+end;
+
+function isTyping(): Boolean;
+var
+  textCol : TColEx;
+  pnts    : TPointArray;
+begin
+  textCol.create(16711680, 30);
+  if textCol.findAllIn(toBox(10, 460, 500, 476), pnts) then
+    result := (length(pnts) > 14);
+end;
+
+function getDepositSlots(): TIntegerArray;
+var
+  P : TPoint;
+  i : Integer;
+begin
+  for i:= 1 to 28 do
+  begin
+    if not itemInSlot(i) then continue;
+    if item_NatRune.getSlot() = i then continue;
+
+    setArrayLength(result, Length(result)+1);
+    result[High(result)] := i;
+  end;
+end;
+
+function foundGauntlets(): Boolean;
+var
+  gauntCol : TColEx;
+  Pnt      : TPoint;
+begin
+  gauntCol.create(7320514, 20);
+  if wearingItem(9) then
+    result := gauntCol.findIn(getEquippedItemBounds('gloves'), Pnt);
+  if result then
+    warn('Goldsmith gauntlets detected', WT_SCRIPT);
+end;
+
+procedure checkSetup();
+var
+  i : Integer;
+begin
+  if lowercase(BARTYPE) = 'gold' then
+    if foundGauntlets() then
+      sXPMod := 56.2;
+
+  if not item_NatRune.inInventory() then
+  begin
+    Shutdown := True;
+    sdReason := 'Nature runes not found';
+    exit;
+  end;
+
+  if lowercase(TASK) = 'superheat' then
+    i := 43
+  else if lowercase(TASK) = 'alch' then
+    i := 55;
+
+  if getSkillMaxLevel('Magic') < i then
+  begin
+    Shutdown := True;
+    sdReason := 'Magic level too low';
+    exit;
+  end;
+
+  if lowercase(TASK) = 'alch' then
+    highlightItemInSlot(slot_Alch);
+
+  if lowercase(TASK) = 'superheat' then
+  begin
+    case lowercase(BARTYPE) of
+      'iron'      : i := 15;
+      'silver'    : i := 20;
+      'steel'     : i := 30;
+      'gold'      : i := 40;
+      'mith',
+      'mithril'   : i := 50;
+      'addy',
+      'adamant',
+      'adamantite': i := 70;
+      'rune',
+      'runite'    : i := 85;
+    end;
+    if getSkillMaxLevel('Smithing') < i then
+    begin
+      Shutdown := True;
+      sdReason := 'Smithing level too low';
+      exit;
+    end;
+  end;
+end;
+
+procedure heatAll();
+var
+  i,h,X,Y : Integer;
+  slots   : TIntegerArray;
+begin
+  if not isLoggedIn() then Exit;
+  if not item_OreA.inInventory() then Exit;
+
+  if not item_NatRune.inInventory() then
+  begin
+    Shutdown := True;
+    sdReason := 'Ran out of Nature runes';
+    exit;
+  end;
+
+  X := 0;
+  Y := 0;
+  if PrimaryAmount < 0 then
+    h := 28
+  else
+    h := PrimaryAmount;
+  case hStyle of
+    'Standard':
+    begin
+      for i:=1 to h do
+      begin
+        if ((X = 0) and (Y = 0)) then
+        begin
+          FTab(tab_Magic);
+          if not waitFindDTM(DTM_Spell, X, Y, AREA_INV, 50, 500) then
+          begin
+            Shutdown := True;
+            sdReason := 'Failed to cast the SuperHeat spell';
+            exit;
+          end;
+        end;
+
+        missMouse(Point(X,Y), 7, 7);
+        fastClick(MOUSE_LEFT);
+        if not waitTab(TAB_INV, 50, 1500) then exit;
+        if not item_OreA.inInventory() then
+          break;
+
+        slots := item_OreA.getSlots();
+        if (length(slots) < 1) then exit;
+        interactSlot(slots[high(slots)], MOUSE_LEFT);
+        brakeMMouse(Point(X,Y), 7, 7, True);
+
+        if not waitFunc(@mageTab, 60, 2000) then
+        begin
+          X := 0;
+          Y := 0;
+        end;
+      end;
+    end;
+    'Increasing':
+    begin
+      for i:=2 to (h+1) do
+      begin
+        if ((X = 0) and (Y = 0)) then
+        begin
+          FTab(tab_Magic);
+          if not waitFindDTM(DTM_Spell, X, Y, AREA_INV, 50, 500) then
+          begin
+            Shutdown := True;
+            sdReason := 'Failed to cast the SuperHeat spell';
+            exit;
+          end;
+        end;
+
+        missMouse(Point(X,Y), 5, 5);
+        fastClick(MOUSE_LEFT);
+        if not waitTab(TAB_INV, 50, 1500) then exit;
+        if not item_OreA.inInventory() then
+          break;
+
+        interactSlot(i, MOUSE_LEFT);
+        brakeMMouse(Point(X,Y), 5, 5, True);
+
+        if not waitFunc(@mageTab, 60, 2000) then
+        begin
+          X := 0;
+          Y := 0;
+        end;
+      end;
+    end;
+
+    else
+    begin
+      Shutdown := True;
+      sdReason := 'Invalid STYLE.  Please use Standard or Increasing';
+      exit;
+    end;
+  end;
+end;
+
+procedure castAlch();
+var
+  X,Y : Integer;
+begin
+  if not isLoggedIn() then Exit;
+
+  if not (getCurrentTab() = TAB_MAGIC) then
+    FTab(TAB_MAGIC);
+
+  if not waitFindDTM(DTM_Spell, X, Y, AREA_INV, 50, 500) then
+  begin
+    Shutdown := True;
+    sdReason := 'Failed to cast the High Alchemy spell';
+    exit;
+  end;
+
+  missMouse(Point(X,Y), 5, 5);
+  fastClick(MOUSE_LEFT);
+  if not waitTab(TAB_INV, 50, 1500) then exit;
+
+  wait(randomRange(210,550));
+  if (getCurrentTab() = TAB_INV) then
+  begin
+    if not item_NatRune.inInventory() then
+    begin
+      Shutdown := True;
+      sdReason := 'Ran out of Nature runes';
+      exit;
+    end;
+    if not itemInSlot(slot_Alch) then
+    begin
+      Shutdown := True;
+      sdReason := 'Finished alching items';
+      exit;
+    end;
+  end;
+
+  interactSlot(slot_Alch, MOUSE_LEFT);
+  brakeMMouse(Point(X,Y), 5, 5, True);
+
+  if waitFunc(@mageTab, 60, 4500) then
+  begin
+    inc(count_Product);
+    stats_IncVariable('66', round(mXPMod));
+  end;
+end;
+
+procedure doBanking();
+var
+  T     : Timer;
+  Pnt   : TPoint;
+  i,c   : Integer;
+  Slots : TIntegerArray;
+label
+  Banking,Close;
+begin
+  if not isLoggedIn() then Exit;
+
+  if (Me.Pin <> '') then
+    inPin(Me.Pin);
+  if isBankOpen() then
+    GoTo Banking;
+
+  if (anySlotActivated() or isUpTextMulti(['Cast','Super','heat'])) then
+  begin
+    mouseBox(AREA_MS, MOUSE_RIGHT);
+    waitOption('Cancel', 200);
+  end;
+
+  setCompass(SH_Camera);
+  for i:=1 to 3 do
+  begin
+    if obj_Bank.find(Pnt) then
+      break;
+    if (i=3) then
+      if not obj_Bank.find(Pnt) then
+      begin
+        Shutdown := True;
+        sdReason := 'Failed to open the bank';
+        Exit;
+      end;
+  end;
+
+  if not openBankPoint(Pnt, True) then
+  begin
+    warn('Failed to open the bank, walking to exit interfaces', WT_SCRIPT);
+    mouse(MMCP, 3, 3, MOUSE_LEFT);
+    wait(randomRange(1300,2700));
+    Exit;
+  end;
+
+  Banking:
+  incEx(count_Product, item_Bar.getAmount(True));
+  stats_IncVariable('66', round(mXPMod*count_Product));
+  stats_IncVariable('69', round(sXPMod*count_Product));
+  depositSlots(getDepositSlots());
+
+// Primary item
+  for i:=1 to 2 do
+    if scrollToItem(item_OreA, Pnt) then
+      break
+    else
+    begin
+      case lowercase(BARTYPE) of
+        'steel': searchBank('Iron ore');
+        'mith','mithril': searchBank('Mithril ore');
+        'addy','adamant','adamantite': searchBank('Adamantite ore');
+        'rune','runite': searchBank('Runite ore');
+      end;
+      if not withdrawItem(item_OreA, -1) then
+      begin
+        Shutdown := True;
+        sdReason := 'Failed to find primary ores in the bank';
+        GoTo Close;
+      end;
+    end;
+
+  c := item_OreA.getAmount();
+  if c <= STOPAT then
+  begin
+    Shutdown := True;
+    sdReason := 'Finished smelting all bars';
+    GoTo Close;
+  end;
+
+  if PrimaryAmount > 0 then
+    if not withdrawPoint(Pnt, PrimaryAmount) then
+    begin
+      Shutdown := True;
+      sdReason := 'Failed to withdraw primary ore';
+      GoTo Close;
+    end;
+  if PrimaryAmount = -1 then
+  begin
+    if RBoolEx(3) then
+    begin
+      if not withdrawPoint(Pnt, 0) then
+      begin
+        Shutdown := True;
+        sdReason := 'Failed to withdraw primary ore';
+        GoTo Close;
+      end;
+    end else
+    begin
+      if not withdrawPoint(Pnt, -1) then
+      begin
+        Shutdown := True;
+        sdReason := 'Failed to withdraw primary ore';
+        GoTo Close;
+      end;
+    end;
+    waitFunc(@isInvFull, 50, 2500);
+  end;
+
+// Secondary item
+  if PrimaryAmount > 0 then
+  begin
+    for i:=1 to 2 do
+    begin
+      if scrollToItem(item_OreB, Pnt) then
+        break
+      else
+      begin
+        searchBank('Coal');
+        if not withdrawItem(item_OreB, -1) then
+        begin
+          Shutdown := True;
+          sdReason := 'Failed to find secondary ores in the bank';
+          GoTo Close;
+        end;
+      end;
+    end;
+
+    c := item_OreB.getAmount();
+    if c <= STOPAT then
+    begin
+      Shutdown := True;
+      sdReason := 'Finished smelting all bars';
+      GoTo Close;
+    end;
+
+    if RBoolEx(3) then
+    begin
+      if not withdrawItem(item_OreB, 0) then
+      begin
+        Shutdown := True;
+        sdReason := 'Failed to withdraw secondary ore';
+        GoTo Close;
+      end;
+    end else
+    begin
+      if not withdrawItem(item_OreB, -1) then
+      begin
+        Shutdown := True;
+        sdReason := 'Failed to withdraw secondary ore';
+        GoTo Close;
+      end;
+    end;
+  end;
+
+  Close:
+  closeInterface();
+  breakHandler();
+end;
+
+procedure scriptLoop();
+begin
+  if TYPINGPAUSE then
+    while isTyping() do
+      wait(randomRange(70,150));
+  case lowercase(TASK) of
+    'superheat':
+    begin
+      heatAll();
+      doBanking();
+      if RBoolEx(3) then
+        doAntiBan();
+      if timer_Report.timeElapsed() > 20000 then
+        report();
+    end;
+    'alch':
+    begin
+      castAlch();
+      if RBoolEx(7) then
+        doAntiBan();
+      if timer_Report.timeElapsed() > 20000 then
+        report();
+    end;
+  end;
+end;
+
+begin
+  declarePlayer();
+  initAL();
+
+  loadVars();
+  AddOnTerminate('freeGlobals');
+
+  mouseSpeed := 25;
+  loginPlayer(true);
+  checkSetup();
+  if not (lowercase(TASK) = 'alch') then
+  begin
+    setCompass(SH_Camera);
+    setAngle(ANGLE_HIGH);
+  end;
+  //toggleRunning(True);
+  fixGraphics();
+
+  Repeat
+    if not Shutdown then
+      if not isLoggedIn() then
+        if loginPlayer(true) then
+        begin
+          if not (lowercase(TASK) = 'alch') then
+          begin
+            setCompass(SH_Camera);
+            setAngle(ANGLE_HIGH);
+          end;
+          toggleRunning(True);
+          fixGraphics();
+        end;
+
+    while isLoggedIn() do
+    begin
+      if Shutdown then break;
+      scriptLoop();
+      //waitEx(50);  // Uncomment if you want it to search for & handle randoms
+    end;
+  Until(Shutdown or (not Me.Active));
+
+  warn(SDReason, WT_SCRIPT);
+  logoutPlayer();
+end.
